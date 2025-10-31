@@ -1,7 +1,16 @@
+#ifdef _WIN32
+#include <io.h>
+#define fileno _fileno
+#else
+#define _POSIX_C_SOURCE 200809L
+#include <unistd.h>
+#endif
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct var {
   char *key;
@@ -22,15 +31,6 @@ vars_t *new_vars() {
   return vars;
 }
 
-void add_variable(vars_t *vars, var_t v) {
-  if (vars->cnt + 1 >= vars->cap) {
-    vars->cap = vars->cap * 2;
-    vars->variables = realloc(vars->variables, vars->cap * sizeof(var_t));
-  }
-  vars->variables[vars->cnt] = v;
-  vars->cnt++;
-}
-
 char *lookup(vars_t *vars, char *key) {
   for (size_t i = 0; i < vars->cnt; i++) {
     if (!strcmp(vars->variables[i].key, key)) {
@@ -38,6 +38,36 @@ char *lookup(vars_t *vars, char *key) {
     }
   }
   return "";
+}
+
+// return idx of var, otherwise return -1
+int contains(vars_t *vars, char *key) {
+  for (size_t i = 0; i < vars->cnt; i++) {
+    if (!strcmp(vars->variables[i].key, key)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// add v to vars
+//
+// if v is in vars update its value
+void add_variable(vars_t *vars, var_t v) {
+  if (vars->cnt + 1 >= vars->cap) {
+    vars->cap = vars->cap * 2;
+    vars->variables = realloc(vars->variables, vars->cap * sizeof(var_t));
+  }
+  int idx = contains(vars, v.key);
+  if (idx == -1) {
+    vars->variables[vars->cnt] = v;
+    vars->cnt++;
+    return;
+  }
+
+  free(vars->variables[idx].key);
+  free(vars->variables[idx].value);
+  vars->variables[idx] = v;
 }
 
 typedef enum token_type {
@@ -330,7 +360,7 @@ char *read_all(FILE *f) {
 void append(char **s, const char *delim, const char *v) {
   if (*s == NULL) {
     *s = malloc(strlen(v) + 1);
-    strcat(*s, v);
+    strcpy(*s, v);
     return;
   }
 
@@ -355,7 +385,6 @@ int main(int argc, char *argv[]) {
   char *manually_set = NULL;
 
   char *input = NULL;
-  int read_input = 0;
   // cli stuff
   for (int i = 1; i < argc; i++) {
     // handle flags
@@ -381,7 +410,6 @@ int main(int argc, char *argv[]) {
         }
         input = read_all(f);
         fclose(f);
-        read_input = 1;
       }
     } else {
       FILE *f = fopen(argv[i], "r");
@@ -399,9 +427,16 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  if (!read_input) {
+  // if (!read_input) {
+  //   input = read_all(stdin);
+  // }
+
+  // determine if anything is coming down the pipe
+  // if so read it
+  if (!isatty(fileno(stdin))) {
     input = read_all(stdin);
   }
+
   if (manually_set != NULL) {
     append(&input, var_sep, manually_set);
   }
