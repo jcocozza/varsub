@@ -37,7 +37,7 @@ char *lookup(vars_t *vars, char *key) {
       return vars->variables[i].value;
     }
   }
-  return "";
+  return NULL;
 }
 
 // return idx of var, otherwise return -1
@@ -292,7 +292,7 @@ char *trim_space(char *s) {
   return s;
 }
 
-char *render(vars_t *vars, char *template) {
+char *render(vars_t *vars, char *template, int err_on_empty) {
   const char *t = template;
   size_t output_size = strlen(template) + 1;
   char *output = malloc(output_size);
@@ -321,6 +321,13 @@ char *render(vars_t *vars, char *template) {
 
     var = trim_space(var);
     char *val = lookup(vars, var);
+
+    if (err_on_empty && val == NULL) {
+      fprintf(stderr, "variable %s not found\n", var);
+      exit(EXIT_FAILURE);
+    } else if (val == NULL) {
+      val = "";
+    }
 
     output_size = strlen(output) + strlen(val) + 1;
     output = realloc(output, output_size);
@@ -377,6 +384,7 @@ void append(char **s, const char *delim, const char *v) {
 // flags
 char *var_sep = "\n";
 char *assignment_op = "=";
+int err_on_empty_var = 0;
 
 void usage() { fprintf(stderr, "usage: varsub [options] [FILE] [vars]"); }
 
@@ -397,6 +405,8 @@ int main(int argc, char *argv[]) {
       } else if (!strcmp(argv[i], "-a")) {
         i++;
         assignment_op = argv[i];
+      } else if (!strcmp(argv[i], "-e")) {
+        err_on_empty_var = 1;
       } else if (!strcmp(argv[i], "--set")) {
         i++;
         char *newvar = argv[i];
@@ -446,6 +456,6 @@ int main(int argc, char *argv[]) {
 
   parser_t *p = new_parser(tkns);
   vars_t *v = parse(p);
-  char *output = render(v, template);
+  char *output = render(v, template, err_on_empty_var);
   fprintf(stdout, "%s", output);
 }
