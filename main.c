@@ -386,7 +386,29 @@ char *var_sep = "\n";
 char *assignment_op = "=";
 int err_on_empty_var = 0;
 
-void usage() { fprintf(stderr, "usage: varsub [options] [FILE] [vars]"); }
+void usage() {
+  fprintf(stderr, "usage: varsub [option]... [template file] [vars]...\n");
+}
+
+void usage_long() {
+  fprintf(stderr, "usage: varsub [option]... [template file] [vars]...\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "options:\n");
+  if (!strcmp(var_sep, "\n")) {
+    fprintf(stderr, "\t-s: set separator (default \"\\n\")\n");
+  } else {
+    fprintf(stderr, "\t-s: set separator (default \"%s\")\n", var_sep);
+  }
+
+  fprintf(stderr, "\t-a: set assignment operator (default \"%s\")\n",
+          assignment_op);
+  fprintf(stderr, "\t-e: enable error on empty var\n");
+  fprintf(stderr,
+          "\t--set: manually set a variable. must use correct separator "
+          "and assignment (e.g. --set foo=bar)\n");
+  fprintf(stderr, "\t--vars: pass in a variable file. file must use correct "
+                  "separator and assignment\n");
+}
 
 int main(int argc, char *argv[]) {
   char *template = NULL;
@@ -397,8 +419,12 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i < argc; i++) {
     // handle flags
     if (argv[i][0] == '-' && strlen(argv[i]) > 0) {
-      if (!strcmp(argv[i], "--help")) {
-        return 0;
+      if (!strcmp(argv[i], "-h")) {
+        usage();
+        return 1;
+      } else if (!strcmp(argv[i], "--help")) {
+        usage_long();
+        return 1;
       } else if (!strcmp(argv[i], "-s")) {
         i++;
         var_sep = argv[i];
@@ -436,10 +462,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "no template found\n");
     exit(EXIT_FAILURE);
   }
-
-  // if (!read_input) {
-  //   input = read_all(stdin);
-  // }
 
   // determine if anything is coming down the pipe
   // if so read it
