@@ -12,6 +12,26 @@
 #include <string.h>
 #include <unistd.h>
 
+char *trim_space(char *s) {
+  size_t size;
+  char *end;
+
+  size = strlen(s);
+
+  if (!size)
+    return s;
+
+  end = s + size - 1;
+  while (end >= s && isspace(*end))
+    end--;
+  *(end + 1) = '\0';
+
+  while (*s && isspace(*s))
+    s++;
+
+  return s;
+}
+
 typedef struct var {
   char *key;
   char *value;
@@ -206,12 +226,14 @@ tokens_t *tokenize(tokenizer_t *t) {
 typedef struct parser {
   tokens_t *tkns;
   int loc;
+  int err_on_empty_var;
 } parser_t;
 
-parser_t *new_parser(tokens_t *tkns) {
+parser_t *new_parser(tokens_t *tkns, int err_on_empty_var) {
   parser_t *p = malloc(sizeof(parser_t));
   p->loc = 0;
   p->tkns = tkns;
+  p->err_on_empty_var = err_on_empty_var;
   return p;
 }
 
@@ -240,6 +262,11 @@ vars_t *parse(parser_t *p) {
       } else {
         curr_var.value = curr_token.txt;
         left_of_assignment = 1;
+
+        if (p->err_on_empty_var && strlen(trim_space(curr_var.value)) == 0) {
+          fprintf(stderr, "ERROR: variable %s is empty.\n", curr_var.key);
+          exit(EXIT_FAILURE);
+        }
         // time to flush
         add_variable(vars, curr_var);
         curr_var.key = NULL;
@@ -247,8 +274,27 @@ vars_t *parse(parser_t *p) {
       }
       break;
     case T_SEP:
+      // if we hit the sep, but haven't assigned a value then error
+      if (!left_of_assignment) {
+        if (p->err_on_empty_var) {
+          fprintf(stderr, "ERROR: variable %s is empty.\n", curr_var.key);
+          exit(EXIT_FAILURE);
+        } else {
+          // time to flush - use empty string
+          curr_var.value = "";
+          left_of_assignment = 1;
+          add_variable(vars, curr_var);
+          curr_var.key = NULL;
+          curr_var.value = NULL;
+        }
+      }
       break;
     case T_ASSIGNMENT:
+      // if we hit assignment but don't have a key then the assignment operator was used twice
+      if (curr_var.key == NULL) {
+        fprintf(stderr, "ERROR: unparseable section. expected ident not assignment: %s\n", curr_token.txt);
+        exit(EXIT_FAILURE);
+      }
       left_of_assignment = 0;
       break;
     case T_END:
@@ -270,26 +316,6 @@ vars_t *parse(parser_t *p) {
   //}
   // add_variable(vars, curr_var);
   return vars;
-}
-
-char *trim_space(char *s) {
-  size_t size;
-  char *end;
-
-  size = strlen(s);
-
-  if (!size)
-    return s;
-
-  end = s + size - 1;
-  while (end >= s && isspace(*end))
-    end--;
-  *(end + 1) = '\0';
-
-  while (*s && isspace(*s))
-    s++;
-
-  return s;
 }
 
 char *render(vars_t *vars, char *template, int err_on_empty) {
@@ -408,6 +434,7 @@ void usage_long() {
           "and assignment (e.g. --set foo=bar)\n");
   fprintf(stderr, "\t--vars: pass in a variable file. file must use correct "
                   "separator and assignment\n");
+  fprintf(stderr, "\t-t, --template: pass template as a string\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -446,6 +473,9 @@ int main(int argc, char *argv[]) {
         }
         input = read_all(f);
         fclose(f);
+      } else if (!strcmp(argv[i], "-t") || !strcmp(argv[i], "--template")) {
+        i++;
+        template = argv[i];
       }
     } else {
       FILE *f = fopen(argv[i], "r");
@@ -468,7 +498,6 @@ int main(int argc, char *argv[]) {
   if (!isatty(fileno(stdin))) {
     input = read_all(stdin);
   }
-
   if (manually_set != NULL) {
     append(&input, var_sep, manually_set);
   }
@@ -476,8 +505,8 @@ int main(int argc, char *argv[]) {
   tokenizer_t *tokenizer = new_tokenizer(input, var_sep, assignment_op);
   tokens_t *tkns = tokenize(tokenizer);
 
-  parser_t *p = new_parser(tkns);
+  parser_t *p = new_parser(tkns, err_on_empty_var);
   vars_t *v = parse(p);
   char *output = render(v, template, err_on_empty_var);
-  fprintf(stdout, "%s", output);
+  fprintf(stdout, "%s\n", output);
 }
