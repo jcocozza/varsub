@@ -101,11 +101,17 @@ typedef enum token_type {
 typedef struct token {
   token_type_t type;
   char *txt;
+
+  int col;
+  int row;
 } token_t;
 
 typedef struct tokenizer {
   char *input;
   int loc;
+
+  int curr_col;
+  int curr_row;
 
   char *separator;
   char *assignment;
@@ -118,6 +124,8 @@ tokenizer_t *new_tokenizer(char *input, char *separator, char *assignment) {
   }
   t->input = input;
   t->loc = 0;
+  t->curr_col = 0;
+  t->curr_row = 0;
 
   t->separator = separator;
   t->assignment = assignment;
@@ -128,6 +136,7 @@ char peek(tokenizer_t *t) { return t->input[t->loc]; }
 
 char advance(tokenizer_t *t) {
   t->loc++;
+  t->curr_col++;
   return t->input[t->loc];
 }
 
@@ -141,7 +150,7 @@ int match(tokenizer_t *t, char *s) {
 }
 
 token_t next_token(tokenizer_t *t) {
-  token_t tkn = {.type = T_UNKNOWN};
+  token_t tkn = {.type = T_UNKNOWN, .col = 0, .row = 0};
   tkn.txt = malloc(1);
   tkn.txt[0] = '\0';
 
@@ -153,11 +162,19 @@ token_t next_token(tokenizer_t *t) {
     return tkn;
   }
 
+  if (c == '\n' && !strcmp(t->separator, "\n")) {
+    t->curr_col = 0;
+    t->curr_row++;
+  }
+
   if (match(t, t->separator)) {
     tkn.type = T_SEP;
     tkn.txt = realloc(tkn.txt, strlen(t->separator) + 1);
     strcpy(tkn.txt, t->separator);
-    t->loc += strlen(t->separator);
+
+    int l = strlen(t->separator);
+    t->loc += l;
+    t->curr_col += l;
     return tkn;
   }
 
@@ -165,7 +182,10 @@ token_t next_token(tokenizer_t *t) {
     tkn.type = T_ASSIGNMENT;
     tkn.txt = realloc(tkn.txt, strlen(t->assignment) + 1);
     strcpy(tkn.txt, t->assignment);
-    t->loc += strlen(t->assignment);
+
+    int l = strlen(t->assignment);
+    t->loc += l;
+    t->curr_col += l;
     return tkn;
   }
 
@@ -218,6 +238,8 @@ tokens_t *tokenize(tokenizer_t *t) {
   token_t curr_token = {0};
   while (curr_token.type != T_END) {
     curr_token = next_token(t);
+    curr_token.col = t->curr_col;
+    curr_token.row = t->curr_row;
     add_token(tkns, curr_token);
   }
   return tkns;
@@ -264,7 +286,8 @@ vars_t *parse(parser_t *p) {
         left_of_assignment = 1;
 
         if (p->err_on_empty_var && strlen(trim_space(curr_var.value)) == 0) {
-          fprintf(stderr, "ERROR: variable %s is empty.\n", curr_var.key);
+          fprintf(stderr, "ERROR[%d:%d]: variable %s is empty.\n",
+                  curr_token.row, curr_token.col, curr_var.key);
           exit(EXIT_FAILURE);
         }
         // time to flush
@@ -277,7 +300,8 @@ vars_t *parse(parser_t *p) {
       // if we hit the sep, but haven't assigned a value then error
       if (!left_of_assignment) {
         if (p->err_on_empty_var) {
-          fprintf(stderr, "ERROR: variable %s is empty.\n", curr_var.key);
+          fprintf(stderr, "ERROR[%d:%d]: variable %s is empty.\n",
+                  curr_token.row, curr_token.col, curr_var.key);
           exit(EXIT_FAILURE);
         } else {
           // time to flush - use empty string
@@ -290,15 +314,20 @@ vars_t *parse(parser_t *p) {
       }
       break;
     case T_ASSIGNMENT:
-      // if we hit assignment but don't have a key then the assignment operator was used twice
+      // if we hit assignment but don't have a key then the assignment operator
+      // was used twice
       if (curr_var.key == NULL) {
-        fprintf(stderr, "ERROR: unparseable section. expected ident not assignment: %s\n", curr_token.txt);
+        fprintf(stderr,
+                "ERROR[%d:%d]: unparseable section. expected ident not "
+                "assignment: %s\n",
+                curr_token.row, curr_token.col, curr_token.txt);
         exit(EXIT_FAILURE);
       }
       left_of_assignment = 0;
       break;
     case T_END:
-      fprintf(stderr, "unexpected end. tok: %s\n", curr_token.txt);
+      fprintf(stderr, "ERROR[%d:%d] unexpected end. tok: %s\n", curr_token.row,
+              curr_token.col, curr_token.txt);
       exit(EXIT_FAILURE);
     }
     curr_token = p_advance(p);
@@ -417,24 +446,24 @@ void usage() {
 }
 
 void usage_long() {
-  fprintf(stderr, "usage: varsub [option]... [template file] [vars]...\n");
+  usage();
   fprintf(stderr, "\n");
   fprintf(stderr, "options:\n");
   if (!strcmp(var_sep, "\n")) {
-    fprintf(stderr, "\t-s: set separator (default \"\\n\")\n");
+    fprintf(stderr, "  -s: set separator (default \"\\n\")\n");
   } else {
-    fprintf(stderr, "\t-s: set separator (default \"%s\")\n", var_sep);
+    fprintf(stderr, "  -s: set separator (default \"%s\")\n", var_sep);
   }
 
-  fprintf(stderr, "\t-a: set assignment operator (default \"%s\")\n",
+  fprintf(stderr, "  -a: set assignment operator (default \"%s\")\n",
           assignment_op);
-  fprintf(stderr, "\t-e: enable error on empty var\n");
+  fprintf(stderr, "  -e: enable error on empty var\n");
   fprintf(stderr,
-          "\t--set: manually set a variable. must use correct separator "
+          "  --set: manually set a variable. must use correct separator "
           "and assignment (e.g. --set foo=bar)\n");
-  fprintf(stderr, "\t--vars: pass in a variable file. file must use correct "
+  fprintf(stderr, "  --vars: pass in a variable file. file must use correct "
                   "separator and assignment\n");
-  fprintf(stderr, "\t-t, --template: pass template as a string\n");
+  fprintf(stderr, "  -t, --template: pass template as a string\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -476,6 +505,10 @@ int main(int argc, char *argv[]) {
       } else if (!strcmp(argv[i], "-t") || !strcmp(argv[i], "--template")) {
         i++;
         template = argv[i];
+      } else {
+          fprintf(stderr, "unknown flag: %s\n", argv[i]);
+          usage_long();
+          exit(EXIT_FAILURE);
       }
     } else {
       FILE *f = fopen(argv[i], "r");
@@ -502,11 +535,21 @@ int main(int argc, char *argv[]) {
     append(&input, var_sep, manually_set);
   }
 
+  if (input == NULL || strlen(input) == 0) {
+    fprintf(stderr, "no variables provided\n");
+    exit(EXIT_FAILURE);
+  }
+
   tokenizer_t *tokenizer = new_tokenizer(input, var_sep, assignment_op);
+
   tokens_t *tkns = tokenize(tokenizer);
 
   parser_t *p = new_parser(tkns, err_on_empty_var);
   vars_t *v = parse(p);
   char *output = render(v, template, err_on_empty_var);
-  fprintf(stdout, "%s\n", output);
+  fprintf(stdout, "%s", output);
+
+  if (output[strlen(output) - 1] != '\n') {
+    fprintf(stdout, "\n");
+  }
 }
