@@ -443,7 +443,7 @@ int err_on_empty_var = 0;
 int print_vars = 0;
 
 void usage() {
-  fprintf(stderr, "usage: varsub [option]... [template file] [vars]...\n");
+  fprintf(stderr, "usage: varsub [OPTIONS] [TEMPLATE FILE] [VARS]\n");
 }
 
 void usage_long() {
@@ -451,21 +451,23 @@ void usage_long() {
   fprintf(stderr, "\n");
   fprintf(stderr, "options:\n");
   if (!strcmp(var_sep, "\n")) {
-    fprintf(stderr, "  -s: set separator (default \"\\n\")\n");
+    fprintf(stderr, "  -s: set variable separator (default \"\\n\")\n");
   } else {
-    fprintf(stderr, "  -s: set separator (default \"%s\")\n", var_sep);
+    fprintf(stderr, "  -s: set variable separator (default \"%s\")\n", var_sep);
   }
-  fprintf(stderr,
-          "  -p: print passed variables and exit. all other flags ignored.");
   fprintf(stderr, "  -a: set assignment operator (default \"%s\")\n",
           assignment_op);
-  fprintf(stderr, "  -e: enable error on empty var\n");
+  fprintf(stderr, "  -p: print passed variables and exit.\n");
   fprintf(stderr,
-          "  --set: manually set a variable. must use correct separator "
-          "and assignment (e.g. --set foo=bar)\n");
+          "  -e: varsub will error when rendering if a variable is empty\n");
+  fprintf(stderr, "  -t, --template: pass template as a string\n");
+  fprintf(stderr, "  --set: manually set a variable. must use correct"
+                  "assignment (e.g. --set foo=bar)\n");
   fprintf(stderr, "  --vars: pass in a variable file. file must use correct "
                   "separator and assignment\n");
-  fprintf(stderr, "  -t, --template: pass template as a string\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "example:\n");
+  fprintf(stderr, "  varsub my_template.txt < vars.txt\n");
 }
 
 int main(int argc, char *argv[]) {
