@@ -440,6 +440,7 @@ void append(char **s, const char *delim, const char *v) {
 char *var_sep = "\n";
 char *assignment_op = "=";
 int err_on_empty_var = 0;
+int print_vars = 0;
 
 void usage() {
   fprintf(stderr, "usage: varsub [option]... [template file] [vars]...\n");
@@ -454,7 +455,8 @@ void usage_long() {
   } else {
     fprintf(stderr, "  -s: set separator (default \"%s\")\n", var_sep);
   }
-
+  fprintf(stderr,
+          "  -p: print passed variables and exit. all other flags ignored.");
   fprintf(stderr, "  -a: set assignment operator (default \"%s\")\n",
           assignment_op);
   fprintf(stderr, "  -e: enable error on empty var\n");
@@ -481,6 +483,8 @@ int main(int argc, char *argv[]) {
       } else if (!strcmp(argv[i], "--help")) {
         usage_long();
         return 1;
+      } else if (!strcmp(argv[i], "-p")) {
+        print_vars = 1;
       } else if (!strcmp(argv[i], "-s")) {
         i++;
         var_sep = argv[i];
@@ -506,9 +510,9 @@ int main(int argc, char *argv[]) {
         i++;
         template = argv[i];
       } else {
-          fprintf(stderr, "unknown flag: %s\n", argv[i]);
-          usage_long();
-          exit(EXIT_FAILURE);
+        fprintf(stderr, "unknown flag: %s\n", argv[i]);
+        usage_long();
+        exit(EXIT_FAILURE);
       }
     } else {
       FILE *f = fopen(argv[i], "r");
@@ -546,6 +550,14 @@ int main(int argc, char *argv[]) {
 
   parser_t *p = new_parser(tkns, err_on_empty_var);
   vars_t *v = parse(p);
+
+  if (print_vars) {
+    for (size_t i = 0; i < v->cnt; i++) {
+      printf("%s:%s\n", v->variables[i].key, v->variables[i].value);
+    }
+    return EXIT_SUCCESS;
+  }
+
   char *output = render(v, template, err_on_empty_var);
   fprintf(stdout, "%s", output);
 
