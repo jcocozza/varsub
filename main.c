@@ -384,8 +384,8 @@ char *render(vars_t *vars, char *template, int err_on_empty) {
       val = "";
     }
 
-    output_size = strlen(output) + strlen(val) + 1;
-    output = realloc(output, output_size);
+    size_t needed = strlen(output) + strlen(val) + strlen(t) + 1;
+    output = realloc(output, needed);
     strcat(output, val);
     t = end + 2;
   }
