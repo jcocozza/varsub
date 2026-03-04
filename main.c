@@ -347,6 +347,26 @@ vars_t *parse(parser_t *p) {
   return vars;
 }
 
+void print_vars_in_template(char *template) {
+  const char *t = template;
+  while (*t) {
+    char *start = strstr(t, "{{");
+    if (!start) { break; }
+    char *end = strstr(t, "}}");
+    if (!end) {
+      fprintf(stderr, "missing closing }}");
+      exit(EXIT_FAILURE);
+    }
+    size_t var_len = end - (start + 2);
+    char *var = malloc(var_len + 1);
+    strncpy(var, start + 2, var_len);
+    var[var_len] = '\0';
+    var = trim_space(var);
+    fprintf(stdout, "%s\n", var);
+    t = end + 2;
+  }
+}
+
 char *render(vars_t *vars, char *template, int err_on_empty) {
   const char *t = template;
   size_t output_size = strlen(template) + 1;
@@ -440,7 +460,8 @@ void append(char **s, const char *delim, const char *v) {
 char *var_sep = "\n";
 char *assignment_op = "=";
 int err_on_empty_var = 0;
-int print_vars = 0;
+int print_passed_vars = 0;
+int print_template_vars = 0;
 
 void usage() {
   fprintf(stderr, "usage: varsub [OPTIONS] [TEMPLATE FILE] [VARS]\n");
@@ -458,6 +479,7 @@ void usage_long() {
   fprintf(stderr, "  -a: set assignment operator (default \"%s\")\n",
           assignment_op);
   fprintf(stderr, "  -p: print passed variables and exit.\n");
+  fprintf(stderr, "  -V: extract variable names in template, print them, and exit.\n");
   fprintf(stderr,
           "  -e: varsub will error when rendering if a variable is empty\n");
   fprintf(stderr, "  -t, --template: pass template as a string\n");
@@ -486,7 +508,7 @@ int main(int argc, char *argv[]) {
         usage_long();
         return 1;
       } else if (!strcmp(argv[i], "-p")) {
-        print_vars = 1;
+        print_passed_vars = 1;
       } else if (!strcmp(argv[i], "-s")) {
         i++;
         var_sep = argv[i];
@@ -495,6 +517,8 @@ int main(int argc, char *argv[]) {
         assignment_op = argv[i];
       } else if (!strcmp(argv[i], "-e")) {
         err_on_empty_var = 1;
+      } else if (!strcmp(argv[i], "-V")) {
+        print_template_vars = 1;
       } else if (!strcmp(argv[i], "--set")) {
         i++;
         char *newvar = argv[i];
@@ -540,6 +564,10 @@ int main(int argc, char *argv[]) {
   if (manually_set != NULL) {
     append(&input, var_sep, manually_set);
   }
+  if (print_template_vars) {
+    print_vars_in_template(template);
+    return EXIT_SUCCESS;
+  }
 
   if (input == NULL || strlen(input) == 0) {
     fprintf(stderr, "no variables provided\n");
@@ -547,15 +575,13 @@ int main(int argc, char *argv[]) {
   }
 
   tokenizer_t *tokenizer = new_tokenizer(input, var_sep, assignment_op);
-
   tokens_t *tkns = tokenize(tokenizer);
-
   parser_t *p = new_parser(tkns, err_on_empty_var);
   vars_t *v = parse(p);
 
-  if (print_vars) {
+  if (print_passed_vars) {
     for (size_t i = 0; i < v->cnt; i++) {
-      printf("%s:%s\n", v->variables[i].key, v->variables[i].value);
+      printf("%s\t%s\n", v->variables[i].key, v->variables[i].value);
     }
     return EXIT_SUCCESS;
   }
