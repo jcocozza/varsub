@@ -106,7 +106,7 @@ Tokens *new_tokens() {
 		return NULL;
 	}
 	return tkns;
-};
+}
 
 void add_token(Tokens *tkns, Token tkn) {
 	if (tkns->cnt + 1 >= tkns->cap) {
